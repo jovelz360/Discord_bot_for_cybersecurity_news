@@ -1,0 +1,363 @@
+{
+  "name": "discord-bot-cybersecurity-news",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -688,
+        144
+      ],
+      "id": "cffc99d7-293e-456d-ab62-5731e004593f",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "jsCode": "const seenUrls = new Set();\nconst topicCount = {};\nconst collected = [];\n\n// 1️⃣ First pass: normalize + collect\nfor (const item of items) {\n  const data = item.json;\n\n  const url =\n    data.link ||\n    data.guid ||\n    data.url ||\n    \"\";\n\n  if (!url || seenUrls.has(url)) continue;\n  seenUrls.add(url);\n\n  const title = (data.title || \"No title\").trim();\n\n  const summary = (\n    data.contentSnippet ||\n    data.content ||\n    data.summary ||\n    data.description ||\n    \"\"\n  )\n    .replace(/<[^>]*>/g, \"\")\n    .trim()\n    .slice(0, 400);\n\n  // 2️⃣ Build a topic key (basic NLP-style normalization)\n  const topicKey = title\n    .toLowerCase()\n    .replace(/[^a-z0-9 ]/g, \"\")\n    .split(\" \")\n    .filter(w => w.length > 4)   // remove weak words\n    .slice(0, 5)                 // limit topic width\n    .join(\" \");\n\n  topicCount[topicKey] = (topicCount[topicKey] || 0) + 1;\n\n  collected.push({\n    title,\n    summary,\n    url,\n    topicKey\n  });\n}\n\n// 3️⃣ Rank items based on topic frequency\nconst ranked = collected.map(item => {\n  const count = topicCount[item.topicKey];\n\n  let rank = \"less important\";\n  if (count >= 3) rank = \"critical\";\n  else if (count === 2) rank = \"important\";\n\n  return {\n    json: {\n      title: item.title,\n      summary: item.summary,\n      url: item.url,\n      rank,\n      occurrences: count\n    }\n  };\n});\n\n// 4️⃣ Sort by importance + frequency\nranked.sort((a, b) => {\n  const weight = { critical: 3, important: 2, \"less important\": 1 };\n  return (\n    weight[b.json.rank] - weight[a.json.rank] ||\n    b.json.occurrences - a.json.occurrences\n  );\n});\n\n// 5️⃣ Limit output to TOP 50\nreturn ranked.slice(0, 50);\n\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        256,
+        144
+      ],
+      "id": "014a41c0-150c-4b61-a004-4e792ec08097",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/12y4Q6BnoXyuz0tf6KeArOoW4DRVfMyDBo8MKPa-bsTE/edit?gid=0#gid=0",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/12y4Q6BnoXyuz0tf6KeArOoW4DRVfMyDBo8MKPa-bsTE/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "tittle": "={{ $json.title }}",
+            "summary": "={{ $json.summary }}",
+            "URL": "={{ $json.url }}",
+            "rank": "={{ $json.rank }}"
+          },
+          "matchingColumns": [
+            "tittle"
+          ],
+          "schema": [
+            {
+              "id": "tittle",
+              "displayName": "tittle",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "summary",
+              "displayName": "summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "URL",
+              "displayName": "URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "rank",
+              "displayName": "rank",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        480,
+        144
+      ],
+      "id": "d47972c4-3e0c-4e0b-b2f1-8154a27bebf2",
+      "name": "Append or update row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "9yYgbmPh7JhKOtfV",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "webhook",
+        "content": "=today's cyber news\n{{ $json.content.parts[0].text }}\nopen for more : \nhttps://docs.google.com/spreadsheets/d/12y4Q6BnoXyuz0tf6KeArOoW4DRVfMyDBo8MKPa-bsTE/edit?gid=0#gid=0",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        1088,
+        144
+      ],
+      "id": "d556131a-4d29-47ff-80a2-a763ce78e97a",
+      "name": "Discord",
+      "webhookId": "2e05cd54-cabc-4992-9eec-a4c840a60f5c",
+      "credentials": {
+        "discordWebhookApi": {
+          "id": "EHgTQLQ3mxG6hwdO",
+          "name": "Discord Webhook account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// FIRST item from previous node\nconst firstItemJson = items[0].json;\n\n// 👇 FIX IS HERE\nconst firstTitle = firstItemJson.tittle || \"\";\n\n// Return ONE clean variable\nreturn [\n  {\n    json: {\n      firstTitle\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        704,
+        144
+      ],
+      "id": "c5cd3433-a5e4-456c-b10a-863a3d442171",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "operation": "clear",
+        "documentId": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/12y4Q6BnoXyuz0tf6KeArOoW4DRVfMyDBo8MKPa-bsTE/edit?gid=0#gid=0",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/12y4Q6BnoXyuz0tf6KeArOoW4DRVfMyDBo8MKPa-bsTE/edit#gid=0"
+        },
+        "clear": "specificRows",
+        "startIndex": 2,
+        "rowsToDelete": 120
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -480,
+        144
+      ],
+      "id": "05e26c55-66ea-4d06-8970-592f4d2c9e29",
+      "name": "Clear sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "9yYgbmPh7JhKOtfV",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.5-flash",
+          "mode": "list",
+          "cachedResultName": "models/gemini-2.5-flash"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=\"{{ $json.firstTitle }}\", this topic i want you to write me a catchy phase for this topic , make it one phase and go on all along dont say any introductions , make the phase more dramatic and catchy for markting "
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        768,
+        384
+      ],
+      "id": "aa1c870e-aa68-4f12-9213-e0c350a628fd",
+      "name": "Message a model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "gObczzkSLVbJUyvw",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return [\n  // ======== TOP CYBERSECURITY NEWS (VERY STABLE) ========\n  { json: { source: \"Krebs on Security\", url: \"https://krebsonsecurity.com/feed/\" } },\n  { json: { source: \"BleepingComputer\", url: \"https://www.bleepingcomputer.com/feed/\" } },\n  { json: { source: \"The Hacker News\", url: \"https://feeds.feedburner.com/TheHackersNews\" } },\n  { json: { source: \"SecurityWeek\", url: \"https://www.securityweek.com/feed/\" } },\n  { json: {source: \"dark reading\", url: \"https://darkreading.com/rss.xml\"}},\n  { json: {source: \"threat post\", url: \"https://threatpost.com/feed\"}},\n  { json: {source: \"security affairs\", url: \"https://securityaffairs.com/feed\"}},\n  { json: {source: \"NVD\", url: \"https://nvd.nist.gov/feeds/xml/cve/misc/nvd-rss.xml\"}},\n  //{ json: { source: \"Infosecurity Magazine\", url: \"https://www.infosecurity-magazine.com/rss/news/\" } },\n\n  // ======== GOVERNMENT / OFFICIAL (VERY RELIABLE) ========\n  { json: { source: \"CISA Advisories\", url: \"https://www.cisa.gov/cybersecurity-advisories/all.xml\" } },\n  \n\n  // ======== VULNERABILITIES & BUGS ========\n  { json: { source: \"Exploit-DB\", url: \"https://www.exploit-db.com/rss.xml\" } },\n  //{ json: { source: \"Packet Storm Security\", url: \"https://packetstormsecurity.com/feeds/news/\" } }, not working\n\n  // ======== MALWARE / THREAT RESEARCH ========\n  { json: { source: \"Malwarebytes Labs\", url: \"https://blog.malwarebytes.com/feed/\" } },\n  //{ json: { source: \"Sophos X-Ops\", url: \"https://news.sophos.com/en-us/feed/\" } },  //too match time \n  { json: { source: \"WeLiveSecurity (ESET)\", url: \"https://www.welivesecurity.com/feed/\" } },\n\n  // ======== THREAT INTEL / RESEARCH TEAMS ========\n  { json: { source: \"Cisco Talos\", url: \"https://blog.talosintelligence.com/rss/\" } },\n  { json: { source: \"Unit 42 (Palo Alto)\", url: \"https://unit42.paloaltonetworks.com/feed/\" } },\n\n  // ======== TECH + SECURITY OVERLAP ========\n  //{ json: { source: \"Ars Technica Security\", url: \"https://feeds.arstechnica.com/arstechnica/security\" } } //not working\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -272,
+        144
+      ],
+      "id": "3acbcbe1-cffa-472d-b56d-02a5b496c5ef",
+      "name": "Code in JavaScript2"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.2,
+      "position": [
+        -48,
+        144
+      ],
+      "id": "e7b084bc-878d-4953-bc1d-7403be4789f8",
+      "name": "RSS Read3"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Clear sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Append or update row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append or update row in sheet": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Discord": {
+      "main": [
+        []
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clear sheet": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model": {
+      "main": [
+        [
+          {
+            "node": "Discord",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript2": {
+      "main": [
+        [
+          {
+            "node": "RSS Read3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RSS Read3": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "aea60979-76e3-43bd-95b5-28d7b51b98df",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "6a7dd277e02a92875ce097d74a7bea5912640dfa4b0caf3dcd322f98b3cb46f2"
+  },
+  "id": "e-ppeBEluaRBUC75IBMwm",
+  "tags": []
+}
