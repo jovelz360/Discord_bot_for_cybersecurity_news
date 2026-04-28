@@ -1,0 +1,1 @@
+"{{ $json.firstTitle }}", this topic i want you to write me a catchy phase for this topic , make it one phase and go on all along dont say any introductions , make the phase more dramatic and catchy for markting 
